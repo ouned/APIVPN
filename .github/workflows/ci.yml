@@ -1,0 +1,189 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+# Cancel superseded runs on the same ref to save runner minutes.
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  # ==========================================================================
+  # Native Linux VPN server: configure, build with warnings-as-errors, and
+  # smoke-test that the server starts and listens on its control port.
+  # ==========================================================================
+  linux-server:
+    name: Linux server (gcc)
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      - name: Configure
+        run: cmake -B build -DCMAKE_BUILD_TYPE=Release -DAPIVPN_WERROR=ON
+
+      - name: Build
+        run: cmake --build build -j"$(nproc)"
+
+      - name: Smoke-test server startup
+        run: |
+          set -euo pipefail
+          ./bin/apivpn_server --port 34299 >server.log 2>&1 &
+          PID=$!
+          sleep 2
+          if ! kill -0 "$PID" 2>/dev/null; then
+            echo "::error::apivpn_server exited early"
+            cat server.log
+            exit 1
+          fi
+          if ! ss -ltn | grep -q ':34299'; then
+            echo "::error::apivpn_server is not listening on 34299"
+            cat server.log
+            kill "$PID" 2>/dev/null || true
+            exit 1
+          fi
+          echo "apivpn_server is running and listening on 34299"
+          kill "$PID"
+          wait "$PID" 2>/dev/null || true
+
+      - name: Upload server binary
+        uses: actions/upload-artifact@v7
+        with:
+          name: apivpn-linux-server
+          path: bin/apivpn_server
+          if-no-files-found: error
+          retention-days: 7
+
+  # ==========================================================================
+  # Windows x86 + x64 cross-build with MinGW-w64 (warnings-as-errors). The
+  # binaries are published as a downloadable artifact for the test job below.
+  # ==========================================================================
+  windows-build:
+    name: Windows x86/x64 build (MinGW)
+    runs-on: ubuntu-latest
+    env:
+      APIVPN_WERROR: "ON"
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      - name: Install MinGW-w64
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            g++-mingw-w64-i686-posix \
+            g++-mingw-w64-x86-64-posix
+
+      - name: Build x86 and x64
+        run: ./build_mingw.sh
+
+      - name: Upload Windows binaries
+        uses: actions/upload-artifact@v7
+        with:
+          name: apivpn-windows-bin
+          path: bin/
+          if-no-files-found: error
+          retention-days: 7
+
+  # ==========================================================================
+  # Run the full end-to-end integration test suite under Wine.
+  # Depends on the cross-built binaries from `windows-build`.
+  # ==========================================================================
+  windows-test:
+    name: Integration tests (Wine)
+    needs: windows-build
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      # i386 + wine32:i386 provide the 32-bit WoW64 runtime (syswow64/ntdll.dll)
+      # needed by the cross-bitness tests. Ubuntu 24.04 ships Wine 9 (old WoW64),
+      # which cannot run 32-bit PEs without it.
+      - name: Install Wine
+        run: |
+          sudo dpkg --add-architecture i386
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            wine64 wine32:i386 wine
+
+      - name: Download Windows binaries
+        uses: actions/download-artifact@v8
+        with:
+          name: apivpn-windows-bin
+          path: bin
+
+      - name: Resolve Wine launcher
+        run: |
+          set -euo pipefail
+          # The Wine launcher's name/location varies by Ubuntu release: some
+          # ship /usr/bin/wine64 (from the `wine` metapackage), others only the
+          # `wine64-stable` wrapper, and the `wine64` package alone may install
+          # just the loader under /usr/lib. Resolve whichever is present.
+          WINE_BIN=""
+          for c in wine64 wine wine64-stable; do
+            if command -v "$c" >/dev/null 2>&1; then WINE_BIN="$(command -v "$c")"; break; fi
+          done
+          if [ -z "$WINE_BIN" ]; then
+            WINE_BIN="$(find /usr/lib /opt -type f \( -name wine -o -name wine64 \) -path '*wine*' 2>/dev/null | sort -r | head -n 1 || true)"
+          fi
+          if [ -z "$WINE_BIN" ]; then
+            echo "::group::Wine install diagnostics"
+            dpkg -l | grep -i wine || true
+            ls -la /usr/bin/wine* 2>/dev/null || true
+            find /usr/lib /opt -maxdepth 5 -name 'wine*' 2>/dev/null || true
+            echo "::endgroup::"
+            echo "::error::no Wine launcher or loader found after install"
+            exit 1
+          fi
+          echo "Resolved Wine launcher: $WINE_BIN"
+          echo "WINE_BIN=$WINE_BIN" >> "$GITHUB_ENV"
+
+      - name: Warm up Wine prefix
+        run: |
+          set -euo pipefail
+          export WINEDEBUG=-all
+          echo "Using Wine launcher: $WINE_BIN"
+          "$WINE_BIN" --version
+          # Use the wineboot builtin so we don't depend on the /usr/bin/wineboot wrapper.
+          "$WINE_BIN" wineboot --init
+
+      - name: Run integration test suite
+        run: |
+          set -o pipefail
+          # The suite is headless: the runner links only the networking core and
+          # the only binaries it spawns are console-subsystem test apps, so no X
+          # display is required.
+          # Bound the run so a hung test fails the job with a usable log instead
+          # of being silently killed by the job-level timeout (which discards
+          # all buffered output). Merge stderr so Wine loader/DLL errors are
+          # captured too, and tee so the report lands both in the Actions log
+          # and in wine-test.log for the artifact below.
+          timeout --signal=TERM --kill-after=30s 15m \
+            env WINEDEBUG=-all "$WINE_BIN" ./bin/integration_test_runner.exe \
+            2>&1 | tee wine-test.log
+
+      - name: Echo captured test log
+        if: always()
+        run: |
+          echo "::group::integration_test_runner output"
+          cat wine-test.log 2>/dev/null || echo "(no test log was produced)"
+          echo "::endgroup::"
+
+      - name: Upload test log
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: wine-test-log
+          path: wine-test.log
+          if-no-files-found: warn
+          retention-days: 7

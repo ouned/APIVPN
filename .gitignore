@@ -1,0 +1,76 @@
+# Build & output directories
+/bin/
+/lib/
+/out/
+/build/
+/build32/
+/build64/
+/build-*/
+cmake-build-*/
+
+# CMake artifacts
+CMakeFiles/
+CMakeCache.txt
+cmake_install.cmake
+Makefile
+compile_commands.json
+CTestTestfile.cmake
+_deps/
+
+# Compiled binaries and object files
+*.obj
+*.o
+*.lo
+*.exe
+*.dll
+*.so
+*.dylib
+*.lib
+*.a
+*.exp
+*.ilk
+*.pdb
+*.idb
+*.ipdb
+*.iobj
+*.pch
+*.tlog
+*.recipe
+*.lastbuildstate
+
+# Visual Studio / MSVC
+.vs/
+*.sln
+*.vcxproj
+*.vcxproj.filters
+*.vcxproj.user
+*.suo
+*.user
+*.userosscache
+*.sln.docstates
+/x64/
+/Win32/
+/Debug/
+/Release/
+/RelWithDebInfo/
+/MinSizeRel/
+
+# IDEs and editors
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# Logs and temporary files
+*.log
+*.tmp
+*.dmp
+*.mdmp
+
+# OS generated files
+.DS_Store
+Thumbs.db
+Desktop.ini
+
+/tests/AoFE/*

@@ -1,0 +1,10 @@
+// APIVPN Win32 resources.
+//
+// gui_resource_ids.h lives in src/client, which the client target adds to its
+// include directories, so the resource compiler resolves it from there.
+#include "gui_resource_ids.h"
+
+IDI_APIVPN ICON "apivpn.ico"
+
+// Straight-alpha RGBA (256x256, 4 bytes per pixel) for createAppIconTexture().
+IDR_APIVPN_RGBA RCDATA "apivpn_rgba.bin"

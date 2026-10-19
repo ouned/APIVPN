@@ -1,0 +1,47 @@
+---
+# APIVPN C++ formatting rules.
+# Apply with: clang-format -i <files>
+Language: Cpp
+BasedOnStyle: LLVM
+Standard: c++20
+
+IndentWidth: 4
+TabWidth: 4
+UseTab: Never
+ColumnLimit: 120
+
+# Pointers/references bind to the type (matches existing code, e.g. `VpnClient* client`).
+PointerAlignment: Left
+ReferenceAlignment: Left
+
+# Class/struct access specifiers align with the class body at 4 spaces.
+AccessModifierOffset: -4
+
+BreakBeforeBraces: Attach
+NamespaceIndentation: None
+IndentCaseLabels: false
+IndentPPDirectives: None
+
+AllowShortFunctionsOnASingleLine: Inline
+AllowShortIfStatementsOnASingleLine: WithoutElse
+AllowShortLoopsOnASingleLine: false
+AllowShortBlocksOnASingleLine: Empty
+
+AlignAfterOpenBracket: Align
+BinPackArguments: true
+BinPackParameters: true
+AllowAllParametersOfDeclarationOnNextLine: true
+
+# Keep include ordering under manual control (platform headers must precede windows.h etc.).
+SortIncludes: false
+FixNamespaceComments: true
+
+SpaceBeforeParens: ControlStatements
+SpaceInEmptyParentheses: false
+SpacesInParentheses: false
+SpacesInAngles: false
+SpacesInContainerLiterals: false
+Cpp11BracedListStyle: true
+DerivePointerAlignment: false
+MaxEmptyLinesToKeep: 1
+KeepEmptyLinesAtTheStartOfBlocks: false
