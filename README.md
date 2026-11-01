@@ -2,9 +2,15 @@
 
 [![CI](https://github.com/ouned/APIVPN/actions/workflows/ci.yml/badge.svg)](https://github.com/ouned/APIVPN/actions/workflows/ci.yml)
 
+
 **APIVPN** is a 100% native C++20 user-mode virtual LAN (VPN) designed for playing classic and legacy LAN games over the internet **without kernel-mode network drivers** (such as TAP or Wintun) and **without Administrator privileges**.
 
 Instead of installing a virtual OS network adapter, APIVPN intercepts and virtualizes networking and socket API calls directly inside applications launched through the VPN client.
+
+**Warning:**
+- This is a vibe-coded weekend project I did for fun.
+- Your virus scanner will freak out over this, because of the way it works (hooks & detours).
+- There is no traffic encryption, do not use it for serious applications.
 
 ![APIVPN Peers](assets/peers.webp)
 ![APIVPN Peers](assets/process.webp)
